@@ -1,0 +1,12 @@
+# 密钥和本机配置
+.env
+conf/config.yml
+
+# 运行产物
+logs/
+tmp/
+*.exe
+build-errors.log
+
+# 编辑器
+.idea/

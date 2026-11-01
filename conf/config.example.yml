@@ -1,0 +1,15 @@
+nodeName: local
+nodeHost: 127.0.0.1
+
+log:
+  logPath: ./logs
+  logName: im-info
+
+mysql:
+  user: root
+  password: "改成你的数据库密码"
+  address: 127.0.0.1:3306
+  name: im
+
+apiGateway:
+  httpPort: 9001
