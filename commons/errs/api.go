@@ -1,17 +1,20 @@
 package errs
 
 const (
-	CodeSuccess           = 0
-	CodeAppKeyRequired    = 10001
-	CodeNonceRequired     = 10002
-	CodeTimestampRequired = 10003
-	CodeSignatureRequired = 10004
-	CodeAppNotExisted     = 10005
-	CodeSignatureFail     = 10006
-	CodeReqBodyIllegal    = 10007
-	CodeInternalTimeout   = 10008
-	CodeParamRequired     = 10010
-	CodeUserNotExist      = 10102
+	CodeSuccess              = 0
+	CodeAppKeyRequired       = 10001
+	CodeNonceRequired        = 10002
+	CodeTimestampRequired    = 10003
+	CodeSignatureRequired    = 10004
+	CodeAppNotExisted        = 10005
+	CodeSignatureFail        = 10006
+	CodeReqBodyIllegal       = 10007
+	CodeInternalTimeout      = 10008
+	CodeParamRequired        = 10010
+	CodeUserNotExist         = 10102
+	CodeConnectAppNotExist   = 11003
+	CodeConnectTokenIllegal  = 11004
+	CodeConnectTokenAuthFail = 11005
 )
 
 type APIError struct {

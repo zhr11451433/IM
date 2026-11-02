@@ -11,6 +11,8 @@ import (
 	"gorm.io/gorm"
 )
 
+//service
+
 type RegisterResult struct {
 	UserID string `json:"user_id"`
 	Token  string `json:"token"`
@@ -23,6 +25,8 @@ type UserInfo struct {
 }
 
 var ErrUserNotExist = errors.New("user not exist")
+
+//用户管理模块初始化时，会向 Runtime 注册两个消息处理器（两个信箱）
 
 func Register(rt *actor.Runtime, gdb *gorm.DB) error {
 	//以后有人向 reg_user 发送消息，就执行我提供的这个函数

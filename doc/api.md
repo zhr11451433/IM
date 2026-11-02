@@ -4,6 +4,12 @@
 > 路径来自 `F:\github_IM\im-server\services\apigateway\routers\router.go` 和 `services\navigator\routers\router.go`。内部方法名来自对应 handler 的实际调用。
 > 各接口的 JSON 字段不在本文一次性展开。做到 `doc/task.md` 里的对应任务时，对照原 handler 和请求模型把字段补进该接口小节。补的是字段，不是改路径。
 
+## 文档使用方式
+
+本文是接口契约，不是代码交付说明。按任务顺序只查看当前接口；路径、鉴权和响应遵循 IM 原项目及已明确批准的差异，不采用 Feed 项目的响应格式或 Token 方案。
+
+尚未逐字段核对的接口不代表已实现。需要补充字段时，先列出原项目依据和建议，经用户授权再改本文；不因“开始任务”默认获得文档修改权限。
+
 ## 1. 服务端 API 通用约定
 
 - Base URL：`http://127.0.0.1:9001`
@@ -48,7 +54,7 @@
 | POST | `/apigateway/users/update` | 更新用户资料 | `upd_user_info` |
 | POST | `/apigateway/users/settings/set` | 设置用户配置 | `set_user_settings` |
 | GET | `/apigateway/users/settings/get` | 读取用户配置 | `get_user_settings` |
-| GET | `/apigateway/users/info` | 查询用户信息 | `qry_user_info` |
+| POST | `/apigateway/users/info` | 查询用户信息 | `qry_user_info` |
 | POST | `/apigateway/users/kick` | 踢下线 | `kick_user` |
 | POST | `/apigateway/users/onlinestatus/query` | 查询在线状态 | `qry_online_status` |
 | POST | `/apigateway/users/banusers/ban` | 封禁 | `ban_users` |
@@ -186,20 +192,31 @@
 
 | 方法 | 路径 | 作用 | 学习顺序 |
 | --- | --- | --- | --- |
-| GET | `/general` | 返回当前用户可用的 WebSocket 地址 | 主线 |
+| POST | `/navigator/general` | 返回当前用户可用的 WebSocket 地址 | 主线 |
 | POST | `/upload-log` | 上传客户端日志 | 后置 |
 | POST | `/upload-log-plain` | 上传未压缩或 gzip 客户端日志 | 后置 |
 | POST | `/log-status` | 上报日志状态 | 后置 |
 
-`GET /general` 的响应至少包含 `appKey`、`userId`、`servers`。单进程阶段 `servers` 来自配置里的默认连接地址。
+`POST /navigator/general` 不需要请求体；请求头必须携带 `x-appkey` 和 `x-token`。成功响应为 `code: 0`，`data` 包含 `app_key`、`user_id`、`servers`。单进程阶段 `servers` 来自配置，默认地址为 `ws://127.0.0.1:9003/im`。
 
-导航路由在参考仓库里挂在可配置前缀下。本仓库默认前缀保持与原项目启动代码一致；实现该任务时读 `navigator` 的启动参数再把前缀写死在这里。写死之前，不另起一个新路径。
+前缀已核对为 `/navigator`；上表日志接口为前缀下的相对路径。参考项目 general 使用 GET，本仓库按用户决定改为 POST。导航当前先查询应用，再调用 `token.Parse`。应用不存在返回 HTTP 200 / `11003`；Token 非法返回 HTTP 401 / `11004`；Token 鉴权失败返回 HTTP 401 / `11005`。数据库查询失败返回 HTTP 500。导航为同步 HTTP 请求，不经过 Actor。当前没有 Token 过期校验。业务 HTTP 接口后续按用户约定使用 POST，其他未实现接口的表格仍保留参考项目方法，开工时同步。
 
 ## 4. WebSocket
 
-默认 `ws://127.0.0.1:9003`。
+默认 `ws://127.0.0.1:9003/im`。WebSocket 握手必须使用 GET，不适用业务 HTTP 接口统一 POST 的约定。
 
-线上帧以参考仓库 `services/connectmanager/server/codec` 为准：二进制头携带 version、cmd、qos、checksum 和 body 长度，body 为对应 protobuf。`connect.proto` 里的 `ImWebsocketMsg` 是消息定义。实现连接任务时对照 Encode / Decode，确认头和 body 的拼法，不把 proto 的 oneof 提前当成已经核实的整帧格式。
+已核对真实入口 `services/connectmanager/server/imwebsocketserver.go`：每条 WebSocket BinaryMessage 的内容直接是 Protobuf `ImWebsocketMsg`，不添加 codec/message.go 中的自定义头、checksum 或长度。字段为 `version`、`cmd`、`qos`、`payload` 和 `oneof testof`。命令号根据 `cmd` 分发。
+
+消息体可通过对应 oneof 字段传递；参考项目也支持放在 `payload` 中进行八字节循环 XOR 混淆。Connect 的混淆码按 `codec/obfuscation.go` 从已知 `protoId: jug9le1m` 前缀推导；后续响应复用该连接的混淆码。混淆不提供传输保密，部署时仍需 WSS。
+
+T05 字段与验收约定：
+
+- Connect：`version: 1`、`cmd: 0`、`qos: 1`；body 为 `ConnectMsgBody`，学习实现要求 `protoId: jug9le1m`、`appkey`、`token` 非空；`deviceId`、`platform` 为可选设备元数据。其余字段保留原 proto 定义。
+- ConnectAck：`cmd: 1`、`qos: 0`；body 包含 `code`、`userId`、`session`、毫秒 `timestamp`。学习实现成功时增加 `conf.heartbeatInterval`、`conf.heartbeatTimeout`（秒）。参考项目当前成功处理函数未填充 conf，此处为学习实现的显式补齐。
+- 鉴权失败使用 ConnectAck 业务码 `11003`（应用不存在）、`11004`（Token 非法）、`11005`（鉴权失败），然后关闭连接；缺失连接参数使用原码 `11015`。数据库故障关闭连接，不伪装为 Token 错误。
+- Ping `cmd: 8` / `qos: 1`、Pong `cmd: 9` / `qos: 0`，均无业务 body。它们是 IM Protobuf 命令，与 WebSocket 控制帧 Ping/Pong 分开。
+- Disconnect `cmd: 2` / `qos: 0`，body 可含 `code`、`timestamp`、`ext`。主动断开、网络断开、超时和进程退出均清理本进程会话。
+- T05 不新增 Actor 方法或业务表；连接控制在连接服务内处理，业务消息路由在 T06 起接入 Actor。当前按连接生成 session，允许多个本地连接；多设备互踢策略尚未实现。握手成功不代表鉴权成功，必须收到成功 ConnectAck。
 
 命令编号固定：
 

@@ -13,3 +13,10 @@ mysql:
 
 apiGateway:
   httpPort: 9001
+
+
+navGateway:
+  httpPort: 9002
+  servers:
+    - ws://127.0.0.1:9003/im
+

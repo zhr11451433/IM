@@ -10,6 +10,7 @@ import (
 
 var (
 	ErrIllegal = errors.New("token illegal")
+	ErrExpired = errors.New("token expired")
 	ErrAuth    = errors.New("token auth fail")
 )
 
@@ -45,6 +46,14 @@ func Issue(appKey, secureKey, userID string, now time.Time) (string, error) {
 }
 
 func Parse(appKey, secureKey, tokenStr string) (string, error) {
+	return ParseWithExpiry(appKey, secureKey, tokenStr, 0, time.Now())
+}
+
+func ParseWithExpiry(
+	appKey, secureKey, tokenStr string,
+	effectiveMinutes int,
+	now time.Time,
+) (string, error) {
 	body, err := base64.URLEncoding.DecodeString(tokenStr)
 	if err != nil {
 		return "", ErrIllegal
@@ -70,6 +79,14 @@ func Parse(appKey, secureKey, tokenStr string) (string, error) {
 	var v value
 	if err := json.Unmarshal(raw, &v); err != nil || v.UserID == "" {
 		return "", ErrAuth
+	}
+	if effectiveMinutes > 0 {
+		expiredAt := time.UnixMilli(v.TokenTime).
+			Add(time.Duration(effectiveMinutes) * time.Minute)
+
+		if expiredAt.UnixMilli() < now.UnixMilli() {
+			return "", ErrExpired
+		}
 	}
 	return v.UserID, nil
 }

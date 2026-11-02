@@ -62,7 +62,7 @@ func testEngine(rt *actor.Runtime) *gin.Engine {
 		return "", false, nil
 	}))
 	api.POST("/users/register", Register(rt))
-	api.GET("/users/info", QryUserInfo(rt))
+	api.POST("/users/info", QryUserInfo(rt))
 	return r
 }
 
@@ -119,7 +119,7 @@ func TestRegisterAndQuery(t *testing.T) {
 		t.Fatalf("second register: status %d body %s", w.Code, w.Body.String())
 	}
 
-	w = call(r, http.MethodGet, "/apigateway/users/info?user_id=u1", "secret-a", nil)
+	w = call(r, http.MethodPost, "/apigateway/users/info?user_id=u1", "secret-a", nil)
 	code, payload = bodyCode(t, w)
 	data = payload["data"].(map[string]any)
 	if w.Code != 200 || code != 0 || data["nickname"] != "新昵称" || data["user_portrait"] != "b.png" {
@@ -157,13 +157,13 @@ func TestRegisterRejectsBadBody(t *testing.T) {
 func TestQueryMissingUser(t *testing.T) {
 	r := testEngine(testRuntime(t))
 
-	w := call(r, http.MethodGet, "/apigateway/users/info", "secret-a", nil)
+	w := call(r, http.MethodPost, "/apigateway/users/info", "secret-a", nil)
 	code, _ := bodyCode(t, w)
 	if w.Code != 400 || code != errs.CodeParamRequired {
 		t.Fatalf("missing user_id: status %d body %s", w.Code, w.Body.String())
 	}
 
-	w = call(r, http.MethodGet, "/apigateway/users/info?user_id=nobody", "secret-a", nil)
+	w = call(r, http.MethodPost, "/apigateway/users/info?user_id=nobody", "secret-a", nil)
 	code, payload := bodyCode(t, w)
 	if w.Code != 200 || code != errs.CodeUserNotExist || payload["msg"] != "user not exist" {
 		t.Fatalf("unknown user: status %d body %s", w.Code, w.Body.String())
@@ -179,7 +179,7 @@ func TestOtherAppCannotSeeUser(t *testing.T) {
 		t.Fatal(w.Body.String())
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/apigateway/users/info?user_id=u1", nil)
+	req := httptest.NewRequest(http.MethodPost, "/apigateway/users/info?user_id=u1", nil)
 	req.Header.Set("appkey", "app-b")
 	req.Header.Set("nonce", "n1")
 	req.Header.Set("timestamp", "1000")

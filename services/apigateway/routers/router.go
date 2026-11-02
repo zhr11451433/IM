@@ -1,11 +1,11 @@
 package routers
 
 import (
+	"IM/services/apigateway/apis"
 	"net/http"
 
 	"IM/commons/actor"
 	"IM/commons/db"
-	"IM/services/apigateway/apis"
 	"IM/services/apigateway/middleware"
 
 	"github.com/gin-gonic/gin"
@@ -23,7 +23,9 @@ func SetRouter(gdb *gorm.DB, rt *actor.Runtime) *gin.Engine {
 	api.Use(middleware.Signature(func(appKey string) (string, bool, error) {
 		return db.FindAppSecret(gdb, appKey)
 	}))
-	api.POST("/users/register", apis.Register(rt))
-	api.POST("/users/info", apis.QryUserInfo(rt))
+	{
+		api.POST("/users/register", apis.Register(rt))
+		api.POST("/users/info", apis.QryUserInfo(rt))
+	}
 	return r
 }

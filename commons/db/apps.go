@@ -57,3 +57,15 @@ func FindAppSecret(gdb *gorm.DB, appKey string) (string, bool, error) {
 	}
 	return app.AppSecret, true, nil
 }
+
+func FindAppSecureKey(gdb *gorm.DB, appKey string) (string, bool, error) {
+	var app App
+	err := gdb.Where("app_key = ?", appKey).Take(&app).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return app.AppSecureKey, true, nil
+}

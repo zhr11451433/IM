@@ -18,6 +18,8 @@ import (
 	"IM/commons/log"
 
 	Log "log"
+
+	navHTTP "IM/services/navigator/routers"
 )
 
 func main() {
@@ -52,28 +54,56 @@ func main() {
 		log.Logger.Error().Err(err).Msg("register actors")
 		os.Exit(1)
 	}
-	r := appHTTP.SetRouter(gormDB, rt)
-	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", cfg.API.HTTPPort),
-		Handler: r,
+
+	//r := appHTTP.SetRouter(gormDB, rt)
+	servers := []*http.Server{
+		{
+			Addr:    fmt.Sprintf(":%d", cfg.API.HTTPPort),
+			Handler: appHTTP.SetRouter(gormDB, rt),
+		},
+		{
+			Addr:    fmt.Sprintf(":%d", cfg.Nav.HTTPPort),
+			Handler: navHTTP.SetRouter(gormDB, cfg.Nav.Servers),
+		},
 	}
-	errCh := make(chan error, 1)
-	go func() {
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errCh <- err
-		}
-	}()
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+
+	ctx, stop := signal.NotifyContext(
+		context.Background(), os.Interrupt, syscall.SIGTERM,
+	)
 	defer stop()
+
+	// 每个服务都可能报告错误，给每个服务留一个位置。
+	errCh := make(chan error, len(servers))
+
+	for _, srv := range servers {
+		go func(s *http.Server) {
+			err := s.ListenAndServe()
+			if err != nil && !errors.Is(err, http.ErrServerClosed) {
+				errCh <- fmt.Errorf("HTTP %s: %w", s.Addr, err)
+			}
+		}(srv)
+	}
+
 	select {
 	case err := <-errCh:
-		Log.Fatalf("routers server error: %v", err)
+		Log.Printf("server failed: %v", err)
 	case <-ctx.Done():
 		Log.Println("shutting down")
 	}
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		Log.Fatalf("shutdown: %v", err)
+
+	// 任意服务失败或收到退出信号，都关闭所有服务。
+	for _, srv := range servers {
+		shutdownCtx, cancel := context.WithTimeout(
+			context.Background(), 5*time.Second,
+		)
+		err := srv.Shutdown(shutdownCtx)
+		cancel()
+
+		if err != nil {
+			Log.Printf("shutdown %s: %v", srv.Addr, err)
+			if closeErr := srv.Close(); closeErr != nil {
+				Log.Printf("close %s: %v", srv.Addr, closeErr)
+			}
+		}
 	}
 }

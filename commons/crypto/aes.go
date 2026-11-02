@@ -38,8 +38,15 @@ func unpkcs7(data []byte) ([]byte, error) {
 		return nil, errors.New("empty plaintext")
 	}
 	n := int(data[len(data)-1])
-	if n == 0 || n > len(data) {
+	if n == 0 || n > aes.BlockSize || n > len(data) {
 		return nil, errors.New("bad padding")
 	}
+
+	for _, b := range data[len(data)-n:] {
+		if b != byte(n) {
+			return nil, errors.New("bad padding")
+		}
+	}
+
 	return data[:len(data)-n], nil
 }

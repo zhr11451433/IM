@@ -127,13 +127,22 @@ func (r *Runtime) Sync(ctx context.Context, method, targetID string, payload any
 	ch := make(chan reply, 1)
 	//请求 ID → 对应请求的响应 Channel
 	r.waiters.Store(id, ch)
-	box <- &envelope{
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	// 入队前开始计时。队列满时发送会阻塞，必须和超时、取消放在同一次 select 里。
+	select {
+	case box <- &envelope{
 		msg:      r.newMessage(ctx, method, targetID, payload),
 		replyID:  id,
 		hasReply: true,
+	}:
+	case <-timer.C:
+		r.waiters.Delete(id)
+		return nil, ErrTimeout
+	case <-ctx.Done():
+		r.waiters.Delete(id)
+		return nil, ctx.Err()
 	}
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
 	select {
 	case resp := <-ch:
 		return resp.value, resp.err

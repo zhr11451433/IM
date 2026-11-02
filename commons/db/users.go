@@ -7,6 +7,8 @@ import (
 	"gorm.io/gorm"
 )
 
+//repo
+
 type User struct {
 	ID       int64  `gorm:"primaryKey;autoIncrement"`
 	AppKey   string `gorm:"column:app_key;size:45;not null;uniqueIndex:uniq_app_user"`

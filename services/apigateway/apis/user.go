@@ -13,6 +13,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+//http层
+
 type registerReq struct {
 	UserID       string `json:"user_id"`
 	Nickname     string `json:"nickname"`

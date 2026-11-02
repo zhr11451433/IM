@@ -8,11 +8,17 @@ import (
 )
 
 type Config struct {
-	NodeName string `yaml:"nodeName"`
-	NodeHost string `yaml:"nodeHost"`
-	Log      Log    `yaml:"log"`
-	Mysql    Mysql  `yaml:"mysql"`
-	API      API    `yaml:"apiGateway"`
+	NodeName string    `yaml:"nodeName"`
+	NodeHost string    `yaml:"nodeHost"`
+	Log      Log       `yaml:"log"`
+	Mysql    Mysql     `yaml:"mysql"`
+	API      API       `yaml:"apiGateway"`
+	Nav      Navigator `yaml:"navGateway"`
+}
+
+type Navigator struct {
+	HTTPPort int      `yaml:"httpPort"`
+	Servers  []string `yaml:"servers"`
 }
 
 type Log struct {
@@ -42,6 +48,20 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.Mysql.Address == "" || cfg.Mysql.Name == "" || cfg.API.HTTPPort == 0 {
 		return Config{}, fmt.Errorf("mysql.address, mysql.name and apiGateway.httpPort are required")
+	}
+	if cfg.Nav.HTTPPort < 1 || cfg.Nav.HTTPPort > 65535 {
+		return Config{}, fmt.Errorf("navGateway.httpPort must be between 1 and 65535")
+	}
+	if cfg.Nav.HTTPPort == cfg.API.HTTPPort {
+		return Config{}, fmt.Errorf("navigator and apiGateway must use different ports")
+	}
+	if len(cfg.Nav.Servers) == 0 {
+		return Config{}, fmt.Errorf("navGateway.servers is required")
+	}
+	for _, server := range cfg.Nav.Servers {
+		if server == "" {
+			return Config{}, fmt.Errorf("navGateway.servers must not contain empty addresses")
+		}
 	}
 	return cfg, nil
 }
