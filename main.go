@@ -4,7 +4,7 @@ import (
 	"IM/commons/actor"
 	"IM/commons/db"
 	appHTTP "IM/services/apigateway/routers"
-	"IM/services/services/usermanager"
+	"IM/services/usermanager"
 	"context"
 	"errors"
 	"fmt"
@@ -20,6 +20,8 @@ import (
 	Log "log"
 
 	navHTTP "IM/services/navigator/routers"
+
+	wsServer "IM/services/connectmanager/server"
 )
 
 func main() {
@@ -50,12 +52,21 @@ func main() {
 	log.Logger.Info().Str("node", cfg.NodeName).Msg("mysql connected")
 
 	rt := actor.New()
+	//服务器启动时，先把所有业务岗位安排好；之后请求来了，再把工作分配给对应岗位
 	if err := usermanager.Register(rt, gormDB); err != nil {
 		log.Logger.Error().Err(err).Msg("register actors")
 		os.Exit(1)
 	}
-
-	//r := appHTTP.SetRouter(gormDB, rt)
+	ws := &wsServer.ImWebsocketServer{}
+	//HTTP 路由分发器（ServeMux）。
+	//它负责根据客户端请求的 URL 路径，把请求交给对应的处理函数。
+	//你可以把它理解成一个路由表，专门记录：
+	//- 请求 /im，交给谁处理？
+	//- 请求 /login，交给谁处理？
+	//- 请求 /upload，交给谁处理？
+	wsMux := http.NewServeMux()
+	wsMux.HandleFunc("/im", ws.ImWsServer)
+	//r	 := appHTTP.SetRouter(gormDB, rt)
 	servers := []*http.Server{
 		{
 			Addr:    fmt.Sprintf(":%d", cfg.API.HTTPPort),
@@ -64,6 +75,10 @@ func main() {
 		{
 			Addr:    fmt.Sprintf(":%d", cfg.Nav.HTTPPort),
 			Handler: navHTTP.SetRouter(gormDB, cfg.Nav.Servers),
+		},
+		{
+			Addr:    fmt.Sprintf(":%d", cfg.Connect.WSPort),
+			Handler: wsMux,
 		},
 	}
 

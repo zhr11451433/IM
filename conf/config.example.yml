@@ -20,3 +20,10 @@ navGateway:
   servers:
     - ws://127.0.0.1:9003/im
 
+connectManager:
+  wsPort: 9003
+  connectTimeoutSeconds: 10
+  heartbeatIntervalSeconds: 20
+  heartbeatTimeoutSeconds: 60
+
+

@@ -14,6 +14,7 @@ var (
 	ErrAuth    = errors.New("token auth fail")
 )
 
+// 用户身份信息
 type value struct {
 	UserID    string `json:"userId"`
 	DeviceID  string `json:"deviceId"`
@@ -21,6 +22,8 @@ type value struct {
 	UserType  int32  `json:"userType"`
 }
 
+// AppKey：标记这张 Token 属于哪个应用。
+// TokenValue：存放内层用户信息加密后的结果（Base64 编码）
 type wrap struct {
 	AppKey     string `json:"appKey"`
 	TokenValue string `json:"tokenValue"`
@@ -34,10 +37,12 @@ func Issue(appKey, secureKey, userID string, now time.Time) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	//AES加密
 	enc, err := crypto.Encrypt(raw, []byte(secureKey))
 	if err != nil {
 		return "", err
 	}
+	//把 AES 加密后的二进制密文 enc 转成普通 base64 字符串，塞进内层 JSON 的 TokenValue 字段
 	body, err := json.Marshal(wrap{AppKey: appKey, TokenValue: base64.StdEncoding.EncodeToString(enc)})
 	if err != nil {
 		return "", err

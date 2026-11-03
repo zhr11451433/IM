@@ -10,6 +10,8 @@ import (
 	"gorm.io/gorm"
 )
 
+//保存应用的基本信息和认证密钥
+
 type App struct {
 	ID           int64     `gorm:"primaryKey;autoIncrement"`
 	AppKey       string    `gorm:"column:app_key;size:45;not null;uniqueIndex"`
@@ -24,6 +26,7 @@ func (App) TableName() string { return "apps" }
 var models = []any{
 	&App{},
 	&User{},
+	&AppExt{},
 }
 
 func OpenGorm(cfg config.Mysql) (*gorm.DB, error) {

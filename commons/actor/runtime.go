@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+//Actor 注册与调度中心
+
 var (
 	ErrMethodNotFound = errors.New("actor method not found")
 	ErrTimeout        = errors.New("actor call timeout")
@@ -16,6 +18,8 @@ var (
 type ctxKey struct {
 }
 
+// WithAppKey 往 ctx 里塞一个键值对：
+// key 是 ctxKey{}（一个空结构体），value 是 appKey 字符串。
 func WithAppKey(ctx context.Context, appKey string) context.Context {
 	return context.WithValue(ctx, ctxKey{}, appKey)
 }
@@ -34,6 +38,8 @@ type Message struct {
 
 type Handler func(ctx context.Context, msg *Message) (any, error)
 
+//actor类
+
 type Runtime struct {
 	mu       sync.Mutex
 	handlers map[string]Handler
@@ -51,12 +57,16 @@ type reply struct {
 	err   error
 }
 
+//生成一个 Runtime 管理者
+
 func New() *Runtime {
 	return &Runtime{
 		handlers: make(map[string]Handler),
 		boxes:    make(map[string]chan *envelope),
 	}
 }
+
+//Runtime 管理者注册并创建 Actor 处理单元
 
 func (r *Runtime) Register(method string, handler Handler) error {
 	r.mu.Lock()

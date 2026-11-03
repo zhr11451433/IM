@@ -104,7 +104,7 @@ func TestNavigatorGeneral(t *testing.T) {
 			reached := false
 			r := gin.New()
 			nav := r.Group("/navigator")
-			nav.Use(middleware.CheckToken(lookup))
+			nav.Use(middleware.CheckToken(lookup, func(string) (int, error) { return 0, nil }))
 			nav.POST("/general",
 				func(c *gin.Context) {
 					reached = true

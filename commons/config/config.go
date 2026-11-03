@@ -3,19 +3,27 @@ package config
 import (
 	"fmt"
 	"os"
+	"slices"
 
 	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
-	NodeName string    `yaml:"nodeName"`
-	NodeHost string    `yaml:"nodeHost"`
-	Log      Log       `yaml:"log"`
-	Mysql    Mysql     `yaml:"mysql"`
-	API      API       `yaml:"apiGateway"`
-	Nav      Navigator `yaml:"navGateway"`
+	NodeName string         `yaml:"nodeName"`
+	NodeHost string         `yaml:"nodeHost"`
+	Log      Log            `yaml:"log"`
+	Mysql    Mysql          `yaml:"mysql"`
+	API      API            `yaml:"apiGateway"`
+	Nav      Navigator      `yaml:"navGateway"`
+	Connect  ConnectManager `yaml:"connectManager"`
 }
 
+type ConnectManager struct {
+	WSPort                   int `yaml:"wsPort"`
+	ConnectTimeoutSeconds    int `yaml:"connectTimeoutSeconds"`
+	HeartbeatIntervalSeconds int `yaml:"heartbeatIntervalSeconds"`
+	HeartbeatTimeoutSeconds  int `yaml:"heartbeatTimeoutSeconds"`
+}
 type Navigator struct {
 	HTTPPort int      `yaml:"httpPort"`
 	Servers  []string `yaml:"servers"`
@@ -58,10 +66,19 @@ func Load(path string) (Config, error) {
 	if len(cfg.Nav.Servers) == 0 {
 		return Config{}, fmt.Errorf("navGateway.servers is required")
 	}
-	for _, server := range cfg.Nav.Servers {
-		if server == "" {
-			return Config{}, fmt.Errorf("navGateway.servers must not contain empty addresses")
-		}
+	if slices.Contains(cfg.Nav.Servers, "") {
+		return Config{}, fmt.Errorf("navGateway.servers must not contain empty addresses")
+	}
+	if cfg.Connect.WSPort < 1 || cfg.Connect.WSPort > 65535 {
+		return Config{}, fmt.Errorf(
+			"connectManager.wsPort must be between 1 and 65535",
+		)
+	}
+	if cfg.Connect.WSPort == cfg.API.HTTPPort ||
+		cfg.Connect.WSPort == cfg.Nav.HTTPPort {
+		return Config{}, fmt.Errorf(
+			"connectManager must use a different port",
+		)
 	}
 	return cfg, nil
 }

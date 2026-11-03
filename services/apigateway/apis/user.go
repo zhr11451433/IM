@@ -1,6 +1,7 @@
 package apis
 
 import (
+	"IM/services/usermanager"
 	"errors"
 	"net/http"
 	"time"
@@ -8,7 +9,6 @@ import (
 	"IM/commons/actor"
 	"IM/commons/db"
 	"IM/commons/errs"
-	"IM/services/services/usermanager"
 
 	"github.com/gin-gonic/gin"
 )

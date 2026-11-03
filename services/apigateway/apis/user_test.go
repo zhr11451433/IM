@@ -1,6 +1,7 @@
 package apis
 
 import (
+	"IM/services/usermanager"
 	"bytes"
 	"context"
 	"crypto/sha1"
@@ -14,7 +15,6 @@ import (
 	"IM/commons/db"
 	"IM/commons/errs"
 	"IM/services/apigateway/middleware"
-	"IM/services/services/usermanager"
 
 	"github.com/gin-gonic/gin"
 )

@@ -16,6 +16,9 @@ func SetRouter(gdb *gorm.DB, servers []string) *gin.Engine {
 		func(appKey string) (string, bool, error) {
 			return db.FindAppSecureKey(gdb, appKey)
 		},
+		func(appKey string) (int, error) {
+			return db.FindTokenEffectiveMinute(gdb, appKey)
+		},
 	))
 	nav.POST("/general", apis.General(servers))
 

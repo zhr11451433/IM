@@ -15,6 +15,7 @@ const (
 	CodeConnectAppNotExist   = 11003
 	CodeConnectTokenIllegal  = 11004
 	CodeConnectTokenAuthFail = 11005
+	CodeConnectTokenExpired  = 11006
 )
 
 type APIError struct {
