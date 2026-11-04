@@ -57,7 +57,30 @@ func main() {
 		log.Logger.Error().Err(err).Msg("register actors")
 		os.Exit(1)
 	}
-	ws := &wsServer.ImWebsocketServer{}
+	lookup := func(ctx context.Context, appKey string) (wsServer.AuthApp, bool, error) {
+		secureKey, ok, err := db.FindAppSecureKey(gormDB.WithContext(ctx), appKey)
+		if err != nil || !ok {
+			return wsServer.AuthApp{}, ok, err
+		}
+		minutes, err := db.FindTokenEffectiveMinute(gormDB.WithContext(ctx), appKey)
+		if err != nil {
+			return wsServer.AuthApp{}, false, err
+		}
+		return wsServer.AuthApp{
+			SecureKey:        secureKey,
+			EffectiveMinutes: minutes,
+		}, true, nil
+	}
+	opts := wsServer.Options{
+		ConnectTimeout:    time.Duration(cfg.Connect.ConnectTimeoutSeconds) * time.Second,
+		HeartbeatInterval: time.Duration(cfg.Connect.HeartbeatIntervalSeconds) * time.Second,
+		HeartbeatTimeout:  time.Duration(cfg.Connect.HeartbeatTimeoutSeconds) * time.Second,
+	}
+	ws, err := wsServer.New(lookup, opts)
+	if err != nil {
+		log.Logger.Error().Err(err).Msg("create server")
+		os.Exit(1)
+	}
 	//HTTP 路由分发器（ServeMux）。
 	//它负责根据客户端请求的 URL 路径，把请求交给对应的处理函数。
 	//你可以把它理解成一个路由表，专门记录：

@@ -18,11 +18,20 @@ type Config struct {
 	Connect  ConnectManager `yaml:"connectManager"`
 }
 
+//后面三个，它们决定了连接建立时允许等待多久，
+//以及连接建立后如何判断客户端是否还活着
+
 type ConnectManager struct {
-	WSPort                   int `yaml:"wsPort"`
-	ConnectTimeoutSeconds    int `yaml:"connectTimeoutSeconds"`
+	//WebSocket 服务监听哪个端口
+	WSPort int `yaml:"wsPort"`
+	//客户端建立 WebSocket 连接后，必须在多长时间内完成身份认证
+	ConnectTimeoutSeconds int `yaml:"connectTimeoutSeconds"`
+	//客户端和服务端定期互相发送的：
+	//你还活着吗？
+	//我还活着！
 	HeartbeatIntervalSeconds int `yaml:"heartbeatIntervalSeconds"`
-	HeartbeatTimeoutSeconds  int `yaml:"heartbeatTimeoutSeconds"`
+	//如果客户端很久没有发送心跳，服务端应该等多久才认定它掉线
+	HeartbeatTimeoutSeconds int `yaml:"heartbeatTimeoutSeconds"`
 }
 type Navigator struct {
 	HTTPPort int      `yaml:"httpPort"`
@@ -78,6 +87,19 @@ func Load(path string) (Config, error) {
 		cfg.Connect.WSPort == cfg.Nav.HTTPPort {
 		return Config{}, fmt.Errorf(
 			"connectManager must use a different port",
+		)
+	}
+	if cfg.Connect.ConnectTimeoutSeconds < 1 ||
+		cfg.Connect.ConnectTimeoutSeconds > 300 {
+		return Config{}, fmt.Errorf(
+			"connectManager.connectTimeoutSeconds must be between 1 and 300",
+		)
+	}
+	if cfg.Connect.HeartbeatIntervalSeconds < 1 ||
+		cfg.Connect.HeartbeatIntervalSeconds >= cfg.Connect.HeartbeatTimeoutSeconds ||
+		cfg.Connect.HeartbeatTimeoutSeconds > 3600 {
+		return Config{}, fmt.Errorf(
+			"heartbeat must satisfy 1 <= interval < timeout <= 3600",
 		)
 	}
 	return cfg, nil
