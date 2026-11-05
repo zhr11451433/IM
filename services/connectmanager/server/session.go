@@ -26,15 +26,13 @@ func (s *ImWebsocketServer) Count(appKey, userID string) int {
 
 func (s *ImWebsocketServer) Close() {
 	s.mu.Lock()
-	if s.closed {
-		s.mu.Unlock()
-		return
-	}
-	s.closed = true
-	for conn := range s.conns {
-		_ = conn.Close()
+	if !s.closed {
+		s.closed = true
+		for conn := range s.conns {
+			_ = conn.Close()
+		}
 	}
 	s.mu.Unlock()
-	//等待所有连接处理 goroutine 退出
+
 	s.wg.Wait()
 }

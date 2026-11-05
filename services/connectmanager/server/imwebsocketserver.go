@@ -3,14 +3,16 @@ package server
 import (
 	"IM/services/connectmanager/server/codec"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	Log "log"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
-	"google.golang.org/protobuf/proto"
 )
 
 //main：注入数据库查询与超时配置
@@ -113,49 +115,137 @@ func (s *ImWebsocketServer) ImWsServer(w http.ResponseWriter, r *http.Request) {
 		delete(s.sessions, conn)
 		s.mu.Unlock()
 	}()
-	for {
-		//ReadMessage()：读取客户端发给服务端的消息。
-		//WriteMessage()：服务端向客户端发送消息
-		//客户端之间不直接通信，而是通过服务端中转消息。
+	conn.SetReadLimit(64 * 1024)
+	connectDeadline := time.Now().Add(s.opts.ConnectTimeout)
+	if err := conn.SetReadDeadline(connectDeadline); err != nil {
+		return
+	}
+	wire := &codec.Wire{}
+	read := func() (*codec.ImWebsocketMsg, error) {
 		msgType, data, err := conn.ReadMessage()
 		if err != nil {
-			break
+			return nil, err
 		}
-		//检查客户端发送的消息是不是二进制消息
+		// 只接受二进制消息
 		if msgType != websocket.BinaryMessage {
-			Log.Printf("expected binary protobuf message")
+			return nil, errors.New("expected binary protobuf message")
+		}
+		msg, err := wire.Decode(data)
+		if err != nil {
+			return nil, fmt.Errorf("decode websocket message: %w", err)
+		}
+		return msg, nil
+	}
+	write := func(msg *codec.ImWebsocketMsg) error {
+		data, err := wire.Encode(msg)
+		if err != nil {
+			return fmt.Errorf("encode im websocket message: %w", err)
+		}
+		err = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		if err != nil {
+			return fmt.Errorf("set write im websocket message: %w", err)
+		}
+		// 发送二进制消息
+		if err := conn.WriteMessage(websocket.BinaryMessage, data); err != nil {
+			return fmt.Errorf("write websocket message: %w", err)
+		}
+		return nil
+	}
+	msg, err := read()
+	if err != nil || msg.Cmd != codec.Connect {
+		return
+	}
+	ctx, cancel := context.WithDeadline(r.Context(), connectDeadline)
+	userID, code, err := s.authenticate(ctx, msg.GetConnectMsgBody())
+	ctxErr := ctx.Err()
+	cancel()
+	if err != nil || ctxErr != nil {
+		return
+	}
+	sessionID := ""
+	if code == 0 {
+		p := make([]byte, 16)
+		if _, err := rand.Read(p); err != nil {
 			return
 		}
-
-		// 【未学】将二进制 Protobuf 数据解码为 Go 结构体。
-		var msg codec.ImWebsocketMsg
-		if err := proto.Unmarshal(data, &msg); err != nil {
-			Log.Printf("decode websocket message: %v", err)
+		sessionID = hex.EncodeToString(p)
+		s.mu.Lock()
+		if s.closed {
+			s.mu.Unlock()
 			return
 		}
-		//这里检查客户端发送的命令是不是 Connect。
-		//按照这段代码的设计，第一次收到的命令必须是 Connect。
-		//为什么？
-		//因为服务端需要先知道：
-		//- 客户端是谁？
-		//- 属于哪个 App？
-		//- Token 是否有效？
-		//- 设备是什么？
-		//完成身份验证和连接初始化后，才能继续处理其他消息
-		if msg.Cmd != 0 {
-			Log.Printf("first command must be Connect")
-			return
-		}
-
 		body := msg.GetConnectMsgBody()
-		if body == nil {
-			Log.Printf("Connect body missing; payload support pending")
+		s.sessions[conn] = Session{
+			AppKey:   body.Appkey,
+			UserID:   userID,
+			DeviceID: body.DeviceId,
+			Platform: body.Platform,
+		}
+		s.mu.Unlock()
+	}
+	// 构造 ConnectAck
+	ack := &codec.ImWebsocketMsg{
+		Version: codec.Version,
+		Cmd:     codec.ConnectAck,
+		Testof: &codec.ImWebsocketMsg_ConnectAckMsgBody{
+			ConnectAckMsgBody: &codec.ConnectAckMsgBody{
+				Code:      code,
+				UserId:    userID,
+				Session:   sessionID,
+				Timestamp: time.Now().UnixMilli(),
+				Conf: &codec.ConnectConf{
+					HeartbeatInterval: int32(s.opts.HeartbeatInterval / time.Second),
+					HeartbeatTimeout:  int32(s.opts.HeartbeatTimeout / time.Second),
+				},
+			},
+		},
+	}
+	// 发送 ConnectAck
+	if err := write(ack); err != nil {
+		return
+	}
+
+	// 鉴权失败，发送失败 ACK 后退出
+	if code != 0 {
+		return
+	}
+	// 进入已登录消息循环
+	for {
+		// 每次读取前刷新读取截止时间
+		if err := conn.SetReadDeadline(time.Now().Add(s.opts.HeartbeatTimeout)); err != nil {
 			return
 		}
 
-		// 不打印 Token。
-		Log.Printf("Connect received: appkey=%q, protoId=%q",
-			body.Appkey, body.ProtoId)
+		msg, err := read()
+		if err != nil {
+			return
+		}
+
+		switch msg.GetCmd() {
+		case codec.Ping:
+			// Ping 不允许携带 one of 或 payload
+			if msg.GetTestof() != nil || len(msg.GetPayload()) != 0 {
+				return
+			}
+
+			// 回复 IM 层 Ping ACK
+			ack := &codec.ImWebsocketMsg{
+				Version: 1,
+				Cmd:     9,
+				Qos:     0,
+			}
+
+			if err := write(ack); err != nil {
+				return
+			}
+
+		case codec.Disconnect:
+			return
+
+		default:
+			// 暂不处理其他业务消息，也不接受再次 Connect
+			return
+		}
 	}
 }
 

@@ -57,30 +57,35 @@ func main() {
 		log.Logger.Error().Err(err).Msg("register actors")
 		os.Exit(1)
 	}
-	lookup := func(ctx context.Context, appKey string) (wsServer.AuthApp, bool, error) {
-		secureKey, ok, err := db.FindAppSecureKey(gormDB.WithContext(ctx), appKey)
-		if err != nil || !ok {
-			return wsServer.AuthApp{}, ok, err
-		}
-		minutes, err := db.FindTokenEffectiveMinute(gormDB.WithContext(ctx), appKey)
-		if err != nil {
-			return wsServer.AuthApp{}, false, err
-		}
-		return wsServer.AuthApp{
-			SecureKey:        secureKey,
-			EffectiveMinutes: minutes,
-		}, true, nil
-	}
-	opts := wsServer.Options{
-		ConnectTimeout:    time.Duration(cfg.Connect.ConnectTimeoutSeconds) * time.Second,
-		HeartbeatInterval: time.Duration(cfg.Connect.HeartbeatIntervalSeconds) * time.Second,
-		HeartbeatTimeout:  time.Duration(cfg.Connect.HeartbeatTimeoutSeconds) * time.Second,
-	}
-	ws, err := wsServer.New(lookup, opts)
+	ws, err := wsServer.New(
+		func(ctx context.Context, appKey string) (wsServer.AuthApp, bool, error) {
+			gdb := gormDB.WithContext(ctx)
+			key, found, err := db.FindAppSecureKey(gdb, appKey)
+			if err != nil || !found {
+				return wsServer.AuthApp{}, found, err
+			}
+			minutes, err := db.FindTokenEffectiveMinute(gdb, appKey)
+			if err != nil {
+				return wsServer.AuthApp{}, false, err
+			}
+			return wsServer.AuthApp{
+				SecureKey: key, EffectiveMinutes: minutes,
+			}, true, nil
+		},
+		wsServer.Options{
+			ConnectTimeout: time.Duration(
+				cfg.Connect.ConnectTimeoutSeconds) * time.Second,
+			HeartbeatInterval: time.Duration(
+				cfg.Connect.HeartbeatIntervalSeconds) * time.Second,
+			HeartbeatTimeout: time.Duration(
+				cfg.Connect.HeartbeatTimeoutSeconds) * time.Second,
+		},
+	)
 	if err != nil {
-		log.Logger.Error().Err(err).Msg("create server")
-		os.Exit(1)
+		Log.Printf("init websocket: %v", err)
+		return
 	}
+	defer ws.Close()
 	//HTTP 路由分发器（ServeMux）。
 	//它负责根据客户端请求的 URL 路径，把请求交给对应的处理函数。
 	//你可以把它理解成一个路由表，专门记录：
@@ -128,7 +133,7 @@ func main() {
 	case <-ctx.Done():
 		Log.Println("shutting down")
 	}
-
+	ws.Close()
 	// 任意服务失败或收到退出信号，都关闭所有服务。
 	for _, srv := range servers {
 		shutdownCtx, cancel := context.WithTimeout(
